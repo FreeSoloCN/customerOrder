@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>工单值班台 · 客服工单趋势分析</title>
+<meta name="description" content="上传工单 JSON，立刻看到趋势、异常和需要跟进的工单。数据只在浏览器本地解析。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js" integrity="sha384-iU8HYtnGQ8Cy4zl7gbNMOhsDTTKX02BTXptVP/vqAWIaTfM7isw76iyZCsjL2eVi" crossorigin="anonymous"></script>
+<style>
+:root{
+  color-scheme: light;
+  --paper:#E8ECF0;
+  --surface:#FFFFFF;
+  --ink:#141E28;
+  --ink2:#56697A;
+  --ink3:#8496A5;
+  --line:#D2DAE2;
+  --line2:#E4E9EE;
+  --alert:#A82A2E;
+  --alert-bg:#FBEDED;
+  --warn:#9C6512;
+  --warn-bg:#FBF3E5;
+  --notice:#3F6482;
+  --notice-bg:#EDF2F6;
+  --calm:#2E5E8E;
+  --calm2:#7FA6C4;
+  --good:#2B7357;
+  --font:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Source Han Sans SC","Noto Sans CJK SC",system-ui,sans-serif;
+  --num:"Barlow Semi Condensed","PingFang SC",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--font);
+  font-size:15px;
+  line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+}
+.num{font-family:var(--num);font-variant-numeric:tabular-nums;font-weight:600;letter-spacing:.01em}
+.wrap{max-width:1060px;margin:0 auto;padding:0 24px}
+a{color:var(--calm)}
+button{font-family:inherit;font-size:14px;cursor:pointer}
+:focus-visible{outline:2px solid var(--calm);outline-offset:2px}
+
+/* ---------- 上传屏 ---------- */
+#intro{min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:48px 0}
+.intro-kicker{color:var(--ink2);font-size:14px;margin:0 0 10px}
+.intro-title{
+  font-size:clamp(30px,4.4vw,46px);line-height:1.18;font-weight:700;
+  letter-spacing:-.02em;margin:0 0 14px;max-width:16em;
+}
+.intro-sub{color:var(--ink2);max-width:34em;margin:0 0 30px}
+.drop{
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-left:4px solid var(--calm);
+  padding:30px 32px;max-width:640px;
+}
+.drop.over{border-left-color:var(--alert);background:#FDFEFF}
+.drop h2{margin:0 0 6px;font-size:18px;font-weight:650}
+.drop p{margin:0 0 18px;color:var(--ink2);font-size:14px}
+.btn{
+  background:var(--ink);color:#fff;border:1px solid var(--ink);
+  padding:9px 18px;border-radius:2px;font-weight:600;
+}
+.btn:hover{background:#000}
+.btn-ghost{background:transparent;color:var(--ink);border:1px solid var(--line);}
+.btn-ghost:hover{border-color:var(--ink2)}
+.btn-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.fields{margin:26px 0 0;font-size:13px;color:var(--ink3);max-width:640px}
+.fields code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink2);font-size:12.5px}
+#errbox{
+  display:none;margin-top:18px;max-width:640px;background:var(--alert-bg);
+  border-left:4px solid var(--alert);padding:16px 20px;
+}
+#errbox h3{margin:0 0 6px;font-size:15px;color:var(--alert)}
+#errbox ul{margin:8px 0 0;padding-left:18px;font-size:13.5px;color:var(--ink2)}
+#errbox li{margin-bottom:3px}
+
+/* ---------- 报表 ---------- */
+#report{display:none;padding-bottom:72px}
+.topbar{
+  position:sticky;top:0;z-index:20;background:rgba(232,236,240,.94);
+  backdrop-filter:blur(6px);border-bottom:1px solid var(--line);
+}
+.topbar .wrap{display:flex;align-items:center;gap:16px;height:56px}
+.brand{font-weight:700;letter-spacing:-.01em}
+.range{color:var(--ink2);font-size:13.5px}
+.topbar .btn-row{margin-left:auto}
+
+.hero{padding:40px 0 8px}
+.hero h1{font-size:clamp(24px,3.2vw,34px);letter-spacing:-.02em;margin:0 0 6px;font-weight:700}
+.hero .lede{color:var(--ink2);margin:0 0 26px;max-width:38em}
+
+/* 异常卡 */
+.alerts{display:grid;gap:14px}
+.alert{background:var(--surface);border:1px solid var(--line2);border-left:4px solid var(--notice);padding:18px 22px}
+.alert.lv1{border-left-color:var(--alert)}
+.alert.lv2{border-left-color:var(--warn)}
+.alert.lv3{border-left-color:var(--notice)}
+.alert-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.tag{font-size:12px;font-weight:700;padding:2px 8px;border-radius:2px}
+.lv1 .tag{background:var(--alert-bg);color:var(--alert)}
+.lv2 .tag{background:var(--warn-bg);color:var(--warn)}
+.lv3 .tag{background:var(--notice-bg);color:var(--notice)}
+.alert h3{margin:0;font-size:17px;font-weight:650;letter-spacing:-.01em}
+.alert .why{margin:8px 0 0;color:var(--ink2);font-size:14px}
+.alert .why b{color:var(--ink);font-weight:600}
+.alert .act{margin:10px 0 0;font-size:14px;color:var(--ink);background:#F5F8FA;border-left:2px solid var(--calm);padding:8px 12px}
+.alert .act b{color:var(--calm);font-weight:650;margin-right:8px}
+details.minor{margin-top:4px}
+details.minor > summary{cursor:pointer;color:var(--calm);font-size:14px;padding:10px 0}
+details.minor > .alert{margin-top:14px}
+.tix{margin-top:12px;display:flex;flex-wrap:wrap;gap:6px}
+.tix button{
+  background:#F3F6F8;border:1px solid var(--line2);color:var(--ink2);
+  font-family:var(--num);font-size:13px;padding:2px 8px;border-radius:2px;
+}
+.tix button:hover{border-color:var(--calm);color:var(--calm)}
+.evidence{margin-top:12px;border-top:1px solid var(--line2);padding-top:10px;display:none}
+.evidence.open{display:block}
+.evidence table{width:100%;border-collapse:collapse;font-size:13px}
+.evidence td{padding:5px 8px 5px 0;border-bottom:1px solid var(--line2);color:var(--ink2);vertical-align:top}
+.evidence td:first-child{font-family:var(--num);color:var(--ink);width:56px}
+.evidence td.d{color:var(--ink)}
+.toggle{background:none;border:none;color:var(--calm);padding:0;font-size:13px;margin-top:10px}
+
+/* KPI 条 */
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--line2);border:1px solid var(--line2);margin:34px 0 0}
+.kpi{background:var(--surface);padding:16px 18px}
+.kpi .v{font-family:var(--num);font-size:34px;line-height:1.1;font-variant-numeric:tabular-nums}
+.kpi .v small{font-size:16px;font-weight:500;color:var(--ink2);margin-left:2px}
+.kpi .k{font-size:13px;color:var(--ink2);margin-top:2px}
+.kpi .n{font-size:12.5px;color:var(--ink3);margin-top:4px}
+.kpi.bad .v{color:var(--alert)}
+
+section.block{margin-top:44px}
+section.block > h2{
+  font-size:19px;font-weight:650;letter-spacing:-.01em;margin:0 0 4px;
+}
+section.block > .note{color:var(--ink2);font-size:13.5px;margin:0 0 16px;max-width:42em}
+.panel{background:var(--surface);border:1px solid var(--line2);padding:18px 20px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.chart-holder{position:relative;height:300px}
+.chart-holder.tall{height:340px}
+
+/* 渠道对比 */
+.cmp{display:grid;gap:14px}
+.cmp-row{display:grid;grid-template-columns:70px 1fr 64px;align-items:center;gap:12px;font-size:14px}
+.bar{height:10px;background:var(--line2);position:relative}
+.bar i{position:absolute;inset:0 auto 0 0;background:var(--calm);display:block}
+.bar i.warnc{background:var(--warn)}
+.cmp-row .val{font-family:var(--num);text-align:right;color:var(--ink)}
+.cmp-h{font-size:13px;color:var(--ink2);margin:0 0 2px}
+
+/* 明细表 */
+.filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.filters select,.filters input[type=search]{
+  font-family:inherit;font-size:13.5px;padding:6px 10px;border:1px solid var(--line);
+  background:var(--surface);color:var(--ink);border-radius:2px;
+}
+.filters label{font-size:13.5px;color:var(--ink2);display:flex;align-items:center;gap:6px}
+table.data{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--surface)}
+table.data th{
+  text-align:left;font-weight:600;font-size:12.5px;color:var(--ink2);
+  border-bottom:1px solid var(--line);padding:9px 10px;white-space:nowrap;
+}
+table.data td{border-bottom:1px solid var(--line2);padding:9px 10px;vertical-align:top}
+table.data td.id{font-family:var(--num);white-space:nowrap}
+table.data td.n{font-family:var(--num);text-align:right;white-space:nowrap}
+table.data tr.flagged td.id{color:var(--alert);font-weight:600}
+table.data tr.hl{background:#FFF8E1}
+.pill{font-size:12px;padding:1px 7px;border-radius:2px;background:#F0F3F6;color:var(--ink2);white-space:nowrap}
+.pill.p高{background:var(--alert-bg);color:var(--alert)}
+.pill.p中{background:var(--warn-bg);color:var(--warn)}
+.sat1,.sat2{color:var(--alert);font-weight:600}
+.no{color:var(--alert)}
+.yes{color:var(--ink3)}
+.empty{padding:22px;color:var(--ink2);font-size:14px}
+
+footer.foot{margin-top:56px;border-top:1px solid var(--line);padding-top:18px;color:var(--ink3);font-size:13px}
+.rulebook{margin-top:10px;font-size:13px;color:var(--ink2)}
+.rulebook summary{cursor:pointer;color:var(--calm);font-size:13.5px}
+.rulebook ul{margin:10px 0 0;padding-left:18px}
+.rulebook li{margin-bottom:5px}
+
+@media (max-width:860px){
+  .kpis{grid-template-columns:repeat(2,1fr)}
+  .grid2{grid-template-columns:1fr}
+  .topbar .wrap{height:auto;padding-top:10px;padding-bottom:10px;flex-wrap:wrap}
+}
+@media (prefers-reduced-motion:no-preference){
+  #report.enter{animation:rise .38s ease-out}
+  @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+}
+</style>
+</head>
+<body>
+
+<main id="intro" class="wrap">
+  <p class="intro-kicker">客服工单趋势分析</p>
+  <h1 class="intro-title">今天这堆工单里，哪几张真的需要你管？</h1>
+  <p class="intro-sub">上传工单文件，页面会自动算出趋势、找出异常，并把该跟进的工单号列给你。文件只在你的浏览器里解析，不会上传到任何服务器。</p>
+
+  <div class="drop" id="drop">
+    <h2>把 tickets.json 拖到这里</h2>
+    <p>或者点下面的按钮选文件。支持工单系统导出的 JSON 数组。</p>
+    <div class="btn-row">
+      <button class="btn" id="pick">选择文件</button>
+      <button class="btn btn-ghost" id="demo">先看示例数据</button>
+      <input type="file" id="file" accept=".json,application/json" hidden>
+    </div>
+  </div>
+
+  <div id="errbox" role="alert" aria-live="polite"></div>
+
+  <p class="fields">文件需要是工单对象组成的数组，每张工单包含
+    <code>ticket_id</code> <code>created_at</code> <code>category</code> <code>description</code>
+    <code>priority</code> <code>resolution_time_hours</code> <code>satisfaction</code>
+    <code>channel</code> <code>is_resolved</code>。</p>
+</main>
+
+<div id="report">
+  <div class="topbar">
+    <div class="wrap">
+      <span class="brand">工单值班台</span>
+      <span class="range" id="range"></span>
+      <div class="btn-row">
+        <button class="btn btn-ghost" id="again">换一份数据</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="hero">
+      <h1 id="heroTitle"></h1>
+      <p class="lede" id="heroLede"></p>
+      <div class="alerts" id="alerts"></div>
+      <details class="rulebook">
+        <summary>这些异常是怎么判出来的</summary>
+        <ul id="rulebook"></ul>
+      </details>
+    </div>
+
+    <div class="kpis" id="kpis"></div>
+
+    <section class="block">
+      <h2>每天进来多少工单，客户满不满意</h2>
+      <p class="note">柱子是当天工单量，深色部分为当天仍未解决的工单；折线是当天平均满意度。量在涨、线在掉，是最需要警惕的组合。</p>
+      <div class="panel"><div class="chart-holder tall"><canvas id="cDaily"></canvas></div></div>
+    </section>
+
+    <section class="block">
+      <h2>哪类问题在变多</h2>
+      <p class="note">把周期对半切开，比较前后两段的<b>日均</b>工单量，避免两段天数不等造成误判。</p>
+      <div class="panel"><div class="chart-holder tall"><canvas id="cCat"></canvas></div></div>
+    </section>
+
+    <div class="grid2">
+      <section class="block">
+        <h2>高优先级真的被优先处理了吗</h2>
+        <p class="note">按优先级看解决率与平均满意度。</p>
+        <div class="panel"><div class="chart-holder"><canvas id="cPri"></canvas></div></div>
+      </section>
+      <section class="block">
+        <h2>处理越久，客户越不满意</h2>
+        <p class="note">每个点是一张工单，横轴处理时长，纵轴满意度。右下角是体验最差的一批。</p>
+        <div class="panel"><div class="chart-holder"><canvas id="cScatter"></canvas></div></div>
+      </section>
+    </div>
+
+    <section class="block">
+      <h2>渠道差异</h2>
+      <p class="note">同样的问题走不同渠道进来，处理时长和满意度可能差很多。</p>
+      <div class="panel"><div class="cmp" id="cmpChannel"></div></div>
+    </section>
+
+    <section class="block">
+      <h2>工单明细</h2>
+      <p class="note">点上面异常卡里的工单号，会跳到这里并高亮。</p>
+      <div class="filters">
+        <select id="fCat"><option value="">全部分类</option></select>
+        <select id="fPri"><option value="">全部优先级</option></select>
+        <select id="fCh"><option value="">全部渠道</option></select>
+        <label><input type="checkbox" id="fUnres"> 只看未解决</label>
+        <label><input type="checkbox" id="fFlag"> 只看被标记的工单</label>
+        <input type="search" id="fQ" placeholder="搜索问题描述">
+      </div>
+      <div id="tableWrap"></div>
+    </section>
+
+    <footer class="foot">
+      <p>共分析 <span id="footN" class="num"></span> 张工单 · 全部计算在浏览器本地完成，数据不会离开这台电脑。</p>
+    </footer>
+  </div>
+</div>
+
+<script type="application/json" id="sample-data">__SAMPLE_DATA__</script>
+<script>
+__APP_JS__
+</script>
+</body>
+</html>
